@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-10-09",
+  "license": "MIT",
+  "upstream": "https://github.com/NateScarlet/holiday-cn",
+  "datasets": [
+    {
+      "year": 2025,
+      "file": "holidays-2025.json",
+      "sha256": "33e3023d3af27e158d31196a3cc5096aa089ecd5cd33280fb0b92cd9c9d180c9",
+      "source": "https://www.gov.cn/zhengce/zhengceku/202411/content_6986383.htm"
+    },
+    {
+      "year": 2026,
+      "file": "holidays-2026.json",
+      "sha256": "0dcfd8004351e132ce15e8444de4df123265b3f490f7e2f8346631122cb5b709",
+      "source": "https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm"
+    }
+  ]
+}
