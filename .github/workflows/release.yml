@@ -1,0 +1,83 @@
+name: Release macOS preview
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_ARCH: arm64
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - name: Install locked frontend dependencies
+        run: npm ci
+      - name: Check release version
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+          const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+          const cargoVersion = readFileSync('src-tauri/Cargo.toml', 'utf8').match(/^version = "([^"]+)"/m)?.[1];
+          if (process.env.RELEASE_TAG !== `v${version}` || config.version !== version || cargoVersion !== version) {
+            throw new Error('Release tag and source versions must match.');
+          }
+          NODE
+      - name: Test
+        run: |
+          npm test
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build Apple Silicon application and disk image
+        run: npm run tauri -- build --target aarch64-apple-darwin --bundles app,dmg
+      - name: Package and verify downloads
+        run: node scripts/package-macos-release.mjs src-tauri/target/aarch64-apple-darwin/release/bundle
+      - name: Retain build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Daylight-${{ github.ref_name }}-macos-arm64
+          path: output/releases/${{ github.ref_name }}/*
+          if-no-files-found: error
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          changelog = Path('CHANGELOG.md').read_text()
+          heading = f"## {os.environ['RELEASE_TAG']} — "
+          start = changelog.index(heading)
+          notes = changelog[start:].split('\n## ', 1)[0]
+          Path(os.environ['RUNNER_TEMP'], 'daylight-release-notes.md').write_text(notes)
+          PY
+          release_flags=()
+          case "$RELEASE_TAG" in
+            v0.*|*-*) release_flags+=(--prerelease) ;;
+          esac
+          gh release create "$RELEASE_TAG" \
+            --verify-tag \
+            --title "朝夕 · Daylight $RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/daylight-release-notes.md" \
+            --draft "${release_flags[@]}" \
+            output/releases/"$RELEASE_TAG"/*
+          gh release edit "$RELEASE_TAG" --draft=false

@@ -1,0 +1,6 @@
+# Generate notices for the first downloadable macOS build, including build dependencies.
+accepted = [
+  "MIT", "Apache-2.0", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0",
+  "MPL-2.0", "CC0-1.0", "MIT-0", "0BSD", "Unlicense",
+]
+targets = ["aarch64-apple-darwin"]

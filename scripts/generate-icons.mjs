@@ -1,17 +1,57 @@
-import { CalendarDays } from "lucide-react";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { Resvg } from "@resvg/resvg-js";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+// The tile artwork is extracted from the selected design. Only its date is typeset.
+// Generated PNGs are checked in, so desktop builds do not require local fonts.
 const directory = new URL("../src-tauri/icons/", import.meta.url);
-mkdirSync(directory, { recursive: true });
-for (const [file, size, color] of [["icon.png", 1024, "#2c6755"], ["tray.png", 64, "#000000"]]) {
-  const svg = renderToStaticMarkup(createElement(CalendarDays, { size, color, strokeWidth: 1.5 }));
-  const png = new Resvg(svg).render().asPng();
-  writeFileSync(new URL(file, directory), png);
+const dates = new URL("../public/icons/dates/", import.meta.url);
+const trayOnly = process.argv.includes("--tray-only");
+const dataImage = (file) => `data:image/png;base64,${readFileSync(new URL(file, import.meta.url)).toString("base64")}`;
+const templates = Object.fromEntries(["light", "dark"].map((theme) => [theme, dataImage(`assets/date-tile-${theme}.png`)]));
+const fontFiles = [
+  "/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+  "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf",
+  "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+].filter(existsSync);
+function render(content, size, viewBox = "0 0 272 272") {
+  return new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="${viewBox}">${content}</svg>`, {
+    font: { loadSystemFonts: !fontFiles.length, fontFiles, defaultFontFamily: "Arial" },
+  }).render().asPng();
 }
-execFileSync(process.execPath, [fileURLToPath(new URL("../node_modules/@tauri-apps/cli/tauri.js", import.meta.url)), "icon", fileURLToPath(new URL("icon.png", directory))], { stdio: "inherit" });
-for (const folder of ["android", "ios"]) rmSync(new URL(folder, directory), { recursive: true, force: true });
+function dateArtwork(day, theme) {
+  return `<image xlink:href="${templates[theme]}" width="272" height="272"/><text x="136" y="216" text-anchor="middle" font-family="Arial" font-size="142" font-weight="700" letter-spacing="-7" fill="${theme === "dark" ? "#f3f3f5" : "#202427"}">${day}</text>`;
+}
+function trayArtwork(day) {
+  // A filled day tile with a clear date and the brand dash, at 21 × 18 points.
+  // The cutouts remain transparent so AppKit can tint the whole template icon.
+  const number = day === undefined ? "" : `<text x="14" y="21" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="#000">${day}</text>`;
+  return new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="84" height="72" viewBox="0 0 28 24"><defs><mask id="date"><rect x="1.6" y=".6" width="24.8" height="22.8" rx="4.6" fill="#fff"/><rect x="11.5" y="3.5" width="5" height="1.6" rx=".8" fill="#000"/>${number}</mask></defs><rect width="28" height="24" fill="#000" mask="url(#date)"/></svg>`, {
+    font: { loadSystemFonts: !fontFiles.length, fontFiles, defaultFontFamily: "Arial" },
+  }).render().asPng();
+}
+mkdirSync(directory, { recursive: true });
+mkdirSync(new URL("dates/tray/", directory), { recursive: true });
+for (let day = 1; day <= 31; day++) writeFileSync(new URL(`dates/tray/${day}.png`, directory), trayArtwork(day));
+writeFileSync(new URL("tray.png", directory), trayArtwork());
+if (!trayOnly) {
+  for (const theme of ["light", "dark"]) {
+    mkdirSync(new URL(`${theme}/`, dates), { recursive: true });
+    mkdirSync(new URL(`dates/${theme}/`, directory), { recursive: true });
+  }
+  for (let day = 1; day <= 31; day++) {
+    for (const theme of ["light", "dark"]) {
+      writeFileSync(new URL(`${theme}/${day}.png`, dates), render(dateArtwork(day, theme), 256));
+      writeFileSync(new URL(`dates/${theme}/${day}.png`, directory), render(`<g transform="translate(27.2 27.2) scale(.8)">${dateArtwork(day, theme)}</g>`, 512));
+    }
+  }
+  // A fixed installer/shortcut icon; running apps use the real date.
+  writeFileSync(new URL("icon.png", directory), render(`<g transform="translate(27.2 27.2) scale(.8)">${dateArtwork(10, "light")}</g>`, 1024));
+  execFileSync(process.execPath, [fileURLToPath(new URL("../node_modules/@tauri-apps/cli/tauri.js", import.meta.url)), "icon", fileURLToPath(new URL("icon.png", directory))], { stdio: "inherit" });
+  for (const folder of ["android", "ios"]) rmSync(new URL(folder, directory), { recursive: true, force: true });
+}
+
+// Keep runtime assets embedded and available offline on every desktop platform.
+const includeArray = (path) => Array.from({ length: 31 }, (_, i) => `    include_bytes!("${path}/${i + 1}.png"),`).join("\n");
+writeFileSync(new URL("../src-tauri/src/date_icon_assets.rs", import.meta.url), `// Generated by npm run icons.\npub const LIGHT: [&[u8]; 31] = [\n${includeArray("../icons/dates/light")}\n];\npub const DARK: [&[u8]; 31] = [\n${includeArray("../icons/dates/dark")}\n];\n#[cfg(any(target_os = "macos", test))]\npub const TRAY: [&[u8]; 31] = [\n${includeArray("../icons/dates/tray")}\n];\n`);

@@ -10,11 +10,56 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, PhysicalPosition, PhysicalSize, Rect, WebviewWindow,
 };
+mod date_icon;
+mod date_icon_assets;
+mod personal_events;
 
 #[derive(Default)]
 struct PopoverState {
     last_hidden: Mutex<Option<Instant>>,
     large_text: AtomicBool,
+    changing_theme: AtomicBool,
+    native_theme: Mutex<Option<String>>,
+}
+
+#[tauri::command]
+fn set_calendar_theme(app: tauri::AppHandle, theme: String) -> Result<(), String> {
+    let appearance = match theme.as_str() {
+        "light" => Some(tauri::Theme::Light),
+        "dark" => Some(tauri::Theme::Dark),
+        "system" => None,
+        _ => return Err("Unsupported theme".into()),
+    };
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let state = handle.state::<PopoverState>();
+        if state.native_theme.lock().unwrap().as_ref() == Some(&theme) {
+            return;
+        }
+        let panel = handle.get_webview_window("popover");
+        let restore_panel = panel.as_ref().is_some_and(|window| {
+            window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false)
+        });
+        // Native appearance changes can transfer focus between the two windows.
+        // Apply them together, keeping an open menu-bar settings panel in place.
+        state.changing_theme.store(true, Ordering::Relaxed);
+        for label in ["main", "popover"] {
+            if let Some(window) = handle.get_webview_window(label) {
+                if let Err(error) = window.set_theme(appearance) {
+                    eprintln!("Unable to set Daylight window theme: {error}");
+                }
+            }
+        }
+        if restore_panel {
+            if let Some(window) = panel {
+                let _ = window.set_focus();
+            }
+        }
+        *state.native_theme.lock().unwrap() = Some(theme);
+        state.changing_theme.store(false, Ordering::Relaxed);
+        date_icon::refresh(&handle);
+    })
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -159,13 +204,19 @@ fn hide_after_focus_leaves(app: tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(PopoverState::default())
+        .manage(date_icon::DateIconState::default())
         .invoke_handler(tauri::generate_handler![
             hide_popover,
             open_main_window,
-            set_popover_large_text
+            set_popover_large_text,
+            set_calendar_theme,
+            personal_events::list_personal_events,
+            personal_events::create_personal_event,
+            personal_events::update_personal_event,
+            personal_events::delete_personal_event
         ])
-        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            personal_events::setup(app.handle())?;
             let show = MenuItem::with_id(app, "show", "打开月历", true, None::<&str>)?;
             let main = MenuItem::with_id(app, "main", "打开独立窗口", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出朝夕", true, None::<&str>)?;
@@ -174,7 +225,7 @@ pub fn run() {
                 .icon(tauri::image::Image::from_bytes(include_bytes!(
                     "../icons/tray.png"
                 ))?)
-                .icon_as_template(true)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("朝夕 · Daylight")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -203,12 +254,26 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+            date_icon::start(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
+            if matches!(
+                event,
+                tauri::WindowEvent::Focused(true) | tauri::WindowEvent::ThemeChanged(_)
+            ) {
+                date_icon::refresh(window.app_handle());
+            }
             if window.label() == "popover" {
                 if matches!(event, tauri::WindowEvent::Focused(false)) {
-                    hide_after_focus_leaves(window.app_handle().clone());
+                    if !window
+                        .app_handle()
+                        .state::<PopoverState>()
+                        .changing_theme
+                        .load(Ordering::Relaxed)
+                    {
+                        hide_after_focus_leaves(window.app_handle().clone());
+                    }
                 }
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

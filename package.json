@@ -4,18 +4,20 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=24.0.0 <25" },
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "node scripts/desktop.mjs",
+    "release:mac": "npm run tauri -- build --bundles app,dmg && node scripts/package-macos-release.mjs",
     "test": "vitest run",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.0",
-    "@tauri-apps/plugin-opener": "^2.7.0",
     "lucide-react": "^0.468.0",
     "lunar-javascript": "^1.7.7",
     "react": "^19.0.0",

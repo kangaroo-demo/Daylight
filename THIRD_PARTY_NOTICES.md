@@ -1,6 +1,6 @@
 # 第三方软件与日期资料
 
-朝夕源码采用 MIT。第三方软件保留各自许可，完整许可文本随源码保存于 `licenses/`；Cargo 与 npm 锁文件固定当前构建依赖。以下是直接依赖与日期资料，不代表已完成所有传递依赖的发行审核。
+朝夕源码采用 MIT。第三方软件保留各自许可，许可文本随源码及应用保存于 `licenses/`；Cargo 与 npm 锁文件固定当前构建依赖。首个 Apple Silicon 发行版的 Rust 依赖（含构建依赖）声明见 `licenses/RUST_DEPENDENCIES.txt`，前端运行依赖声明见 `licenses/NPM_DEPENDENCIES.txt`。以下列出主要直接依赖与日期资料。
 
 | 项目 | 用途 | 许可 / 出处 |
 |---|---|---|
@@ -8,7 +8,6 @@
 | [holiday-cn](https://github.com/NateScarlet/holiday-cn) | 2025、2026 休班 JSON | MIT，Copyright (c) 2019 NateScarlet |
 | [React / React DOM](https://github.com/facebook/react) | 界面 | MIT |
 | [Tauri](https://github.com/tauri-apps/tauri) | 桌面窗口与托盘 | MIT / Apache-2.0 |
-| [Tauri opener](https://github.com/tauri-apps/plugins-workspace) | 主动打开资料来源链接 | MIT / Apache-2.0 |
 | [objc2 AppKit / Foundation](https://github.com/madsmtm/objc2) | macOS 原生菜单焦点判断 | MIT；AppKit 也可选 Zlib / Apache-2.0，采用 MIT |
 | [Lucide](https://lucide.dev/license) | 控件图标与开发期应用图标 | ISC；Feather 来源部分为 MIT，已保存完整声明 |
 
