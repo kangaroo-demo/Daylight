@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -14,14 +16,17 @@ concurrency:
 
 jobs:
   macos:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
     runs-on: macos-14
     timeout-minutes: 45
     env:
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.1.0' }}
       RELEASE_ARCH: arm64
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.1.0' }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -54,7 +59,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Daylight-${{ github.ref_name }}-macos-arm64
-          path: output/releases/${{ github.ref_name }}/*
+          path: output/releases/${{ env.RELEASE_TAG }}/*
           if-no-files-found: error
       - name: Publish GitHub Release
         env:
