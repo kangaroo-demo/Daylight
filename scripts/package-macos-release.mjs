@@ -67,7 +67,14 @@ try {
   mounted = true;
   verifyPackagedApp(join(mount, `${config.productName}.app`));
 } finally {
-  if (mounted) run("hdiutil", ["detach", mount]);
+  if (mounted) {
+    try {
+      run("hdiutil", ["detach", mount]);
+    } catch {
+      // Finder or Spotlight may briefly hold this read-only verification mount.
+      run("hdiutil", ["detach", "-force", mount]);
+    }
+  }
   rmSync(temporary, { recursive: true, force: true });
 }
 rmSync(join(output, zip), { force: true });
